@@ -1,0 +1,16 @@
+    # Step 3 - download file
+    params = (
+        ('sort=name')
+    )
+    session.headers = {'Authorization': 'Bearer %s' % canvas_key}
+    r = session.get(canvas_url+'?'+'only[]=names',params=params)
+    r.raise_for_status()
+    r = r.json()
+    for x in r:
+        if (x['filename']) == download_filename:
+            file_id = (x['id'])
+    r = session.get(canvas_url+'/'+str(file_id), stream=True)
+    print('\ndownload file content:')
+    print(r.content)
+    with open(download_filename, 'wb') as f:
+        f.write(r.content)
