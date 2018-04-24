@@ -7,19 +7,32 @@ import socket
 import pickle
 from zeroconf import __version__, ServiceInfo, Zeroconf
 
+
+# trying to find the ip to broadcast over
+def get_ip_address():
+ ip_address = '';
+ s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+ s.connect(("8.8.8.8",80))
+ ip_address = s.getsockname()[0]
+ s.close()
+ return ip_address
+
+ip = get_ip_address()
+print(ip)
+
+
 # setup the zeroconf stuff here
 r = Zeroconf()
 
 desc = {'version': '0.10', 'a': 'test value', 'b': 'another value'}
 info = ServiceInfo("_http._tcp.local.",
                    "My Service Name._http._tcp.local.",
-                   socket.inet_aton("169.254.236.221"), 9999, 0, 0, desc)
-
+                   socket.inet_aton(str(ip)), 9999, 0, 0, desc) 
 r.register_service(info)
 
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(('0.0.0.0', 9999))
+s.bind((str(ip), 9999))
 s.listen(1)
 
 

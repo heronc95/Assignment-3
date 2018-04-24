@@ -1,6 +1,6 @@
 from pymongo import MongoClient
 from functools import wraps
-from flask import Flask, request, Response
+from flask import Flask, request, Response, jsonify
 from zeroconf import Zeroconf
 import socket
 import pickle
@@ -9,53 +9,32 @@ from canvas_token import authentication
 
 import requests
 
-
-
 collection = None
 client = None
 
 r = Zeroconf()
 
-
-
 # Setup for the canvas API stuff here
 auth = authentication()
 canvas_key = auth.getcanvas_key()
 canvas_url = auth.getcanvas_url()
-download_filename = 'hello.txt'
-upload_filename   = 'hello.txt'
 # Set up a session
 session = requests.Session()
 session.headers = {'Authorization': 'Bearer %s' % canvas_key}
 
-
-
-
-
-
-
-
-
-
-
-# # Step 3 - download file
-# r = requests.get(canvas_url+'/'+download_filename, allow_redirects=True)
-# #open(download_filename, 'wb').write(r.content)
-# r = r.json()  # The requests now works and returns response 200 - not 301.
-# print(' ')
-# print(r)  # This is a dictionary containing some info about the downloaded file
-
-
-
-
 def get_file_from_canvas(download_filename):
-    return requests.get(canvas_url + '/' + download_filename, allow_redirects=True)
-    # open(download_filename, 'wb').write(r.content)
-    # r = r.json()  # The requests now works and returns response 200 - not 301.
-    # print(' ')
-    # print(r)  # This is a dictionary containing some info about the downloaded file
-
-
+    params = (
+        ('sort=name')
+    )
+    session.headers = {'Authorization': 'Bearer %s' % canvas_key}
+    r = session.get(canvas_url+'?'+'only[]=names',params=params)
+    r.raise_for_status()
+    r = r.json()
+    for x in r:
+        if (x['filename']) == download_filename:
+            file_id = (x['id'])
+    r = session.get(canvas_url+'/'+str(file_id), stream=True)
+    return r.content 
 def push_file_to_canvas(upload_filename, file):
     # Step 1 - tell Canvas you want to upload a file
     payload = {}
@@ -66,11 +45,7 @@ def push_file_to_canvas(upload_filename, file):
     r = r.json()
     # Step 2 - upload file
     payload = list(r['upload_params'].items())  # Note this is now a list of tuples
-
-    #with open(upload_filename, 'rb') as f:
-    #    file_content = f.read()
     file_content = file.read()
-
     payload.append((u'file', file_content))  # Append file at the end of list of tuples
     r = requests.post(r['upload_url'], files=payload)
     r.raise_for_status()
@@ -88,10 +63,8 @@ def check_auth(username, password):
 
 def authenticate():
     """Sends a 401 response that enables basic auth"""
-    return Response(
-    'Could not verify your access level for that URL.\n'
-    'You have to login with proper credentials', 401,
-    {'WWW-Authenticate': 'Basic realm="Login Required"'})
+    return Response(response='Could not verify your access level for that URL.\n'
+    'You have to login with proper credentials\n',status=403)
 
 def requires_auth(f):
     @wraps(f)
@@ -116,7 +89,7 @@ def index():
         if info:
             return Response(status=200, response=str(data))
         else:
-            return Response(response="LED resource is not ready",
+            return Response(response="LED resource is not ready\n",
                             status=503)
     elif request.method == "POST":
         data_sent = request.form # a dict
@@ -142,36 +115,40 @@ def index():
             s.connect((TCP_IP, TCP_PORT))
             s.send(pickle.dumps(MESSAGE))
             s.close()
-            return Response(response="Success", status=200) 
+            return Response(response="Success\n", status=200) 
         else:
-            return Response(response="LED resource is not ready",
+            return Response(response="LED resource is not ready\n",
                             status=503)
-
-
-# @app.route('/canvas', methods=['GET', 'POST'])
-# @requires_auth
-# def canvas():
-#     if request.method == 'GET':
-#         info = r.get_service_info("_http._tcp.local.", "My Service Name._http._tcp.local.")
-#         if info:
-#             return Response(status=200, response=str(data))
-#         else:
-#             return Response()
 
 @app.route('/canvas/download', methods=['GET'])
 @requires_auth
 def canvas_download():
-    print("here")
-
     if request.method == 'GET':
-        print(request)
         filename = request.args.get('filename')
-        print(filename)
-        get_file_from_canvas(filename)
-        return Response(response="Success", status=200)
+        ret = get_file_from_canvas(filename)
+        return Response(response=str(ret), status=200)
     else:
-        return Response(status=400, response='Failed')
+        return Response(status=400, response='Failed\n')
 
+@app.route('/canvas', methods=['GET'])
+@requires_auth
+def canvas_list_files():
+    if request.method == 'GET':
+        params = (
+            ('sort=name')
+        )
+        r = session.get(canvas_url+'?'+'only[]=names',params=params)
+        r.raise_for_status()
+        r = r.json()
+        ret = {}
+        count = 0
+        for x in r:
+            ret['filename'+str(count)] = x['filename']
+            count += 1
+        return jsonify(ret)
+
+    else:
+        return Response(status=400, response='Failed\n')
 
 @app.route('/canvas/upload', methods=['POST'])
 @requires_auth
@@ -184,13 +161,95 @@ def canvas_upload():
         file = r.files[filename]
 
         push_file_to_canvas(filename, file)
-        return Response(response="Success", status=200)
+        return Response(response="Success\n", status=200)
 
     else:
         return Response(status=400)
 
 
+# implementation of the custom API
+@app.route('/custom/times', methods=['GET', 'POST'])
+@requires_auth
+def custom_api():
+    print(request.headers)
+    if request.method == 'GET':
+        # Check if the resource is available now, this was for the custom service example
+        info = r.get_service_info("_http._tcp.local.", "My Service Name2._http._tcp.local.")
+        if info:
+            #make a request for the current time info.address
+            to_send = "http://"
+            to_send += str(socket.inet_ntoa(info.address))
+            to_send += ":5000/custom/times"
+            new_request = requests.get(to_send)
+            return Response(response=new_request.text, status=200)
+        else:
+            return Response(response="Custom resource is not ready", status=503) 
+    elif request.method == 'POST':
+        info = r.get_service_info("_http._tcp.local.", "My Service Name2._http._tcp.local.")
+        if info:
+            # make a request for the current time info.address
+            to_send = "http://"
+            to_send += str(socket.inet_ntoa(info.address))
+            to_send += ":5000/custom/times"
+            new_request = requests.post(to_send, data=request.form)
+            return Response(response=new_request.text, status=200)
+        else:
+            return  Response(response="Custom resource is not ready\n", status=503)
+    else:
+        return Response(status=400) 
 
+
+@app.route('/custom/times/<int:time_id>', methods=['GET', 'POST'])
+@requires_auth
+def custom_api_time(time_id):
+    print(request.headers)
+    if request.method == 'GET':
+        # Check if the resource is available now, this was for the custom service example
+        info = r.get_service_info("_http._tcp.local.", "My Service Name2._http._tcp.local.")
+        if info:
+            #make a request for the current time
+            to_send = "http://"
+            to_send += str(socket.inet_ntoa(info.address))
+            to_send += ":5000/custom/times/"
+            to_send += str(time_id)
+            new_request = requests.get(to_send)
+            return Response(response=new_request.text, status=200)
+        else:
+            return  Response(response="Custom resource is not ready.", status=503)
+    elif request.method == 'POST':
+        # Check if the resource is available now, this was for the custom service$
+        info = r.get_service_info("_http._tcp.local.", "My Service Name2._http._tcp.local.")
+        if info:
+            #make a request for the current time
+            to_send = "http://"
+            to_send += str(socket.inet_ntoa(info.address))
+            to_send += ":5000/custom/times/" + str(time_id)
+            new_request = requests.post(to_send, data=request.form)
+            return Response(response=new_request.text, status=200)
+        else:
+            return  Response(response="Custom resource is not ready.", status=503)
+    else:
+        return Response(status=400)
+
+
+@app.route('/custom/times/currentTime', methods=['GET'])
+@requires_auth
+def custom_api_current_time():
+    print(request.headers)
+    if request.method == 'GET':
+        # Check if the resource is available now, this was for the custom service example
+        info = r.get_service_info("_http._tcp.local.", "My Service Name2._http._tcp.local.")
+        if info:
+            #make a request for the current time
+            to_send = "http://"
+            to_send += str(socket.inet_ntoa(info.address))
+            to_send += ":5000/custom/times/currentTime"
+            new_request = requests.get(to_send)
+            return Response(response=new_request.text, status=200)
+        else:
+            return  Response(response="Custom resource is not ready.\n", status=503)
+    else:
+        return Response(status=400)
 
 if __name__ == '__main__':
 
@@ -204,6 +263,7 @@ if __name__ == '__main__':
 
     # run the server now
     app.run(host='0.0.0.0', port=5000, debug=True)
+
 
 
 

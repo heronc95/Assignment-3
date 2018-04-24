@@ -15,6 +15,20 @@ import pytz
 import socket
 import pickle
 from zeroconf import __version__, ServiceInfo, Zeroconf
+import netifaces as ni
+
+
+# This gets the ip address of the outfacing ip address to listen on
+def get_ip_address():
+ ip_address = '';
+ s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+ s.connect(("8.8.8.8",80))
+ ip_address = s.getsockname()[0]
+ s.close()
+ return ip_address
+
+ip = get_ip_address()
+
 
 #setup the zeroconf stuff here
 r = Zeroconf()
@@ -22,7 +36,7 @@ r = Zeroconf()
 desc = {'version': '0.10', 'a': 'test value', 'b': 'another value'}
 info = ServiceInfo("_http._tcp.local.",
                    "My Service Name2._http._tcp.local.",
-                   socket.inet_aton("0.0.0.0"), 5000, 0, 0, desc)
+                   socket.inet_aton(str(ip)), 5000, 0, 0, desc)
 
 r.register_service(info)
 
@@ -51,8 +65,8 @@ def get_post_times():
             'City': data['City'], #request.json['City', ""],
             'TimeZone': data['TimeZone'] #request.json('TimeZone', ""),
         }
-        times.append(time)
-        return return jsonify(t), 201
+        times.append(t)
+        return jsonify(t), 201
     
 @app.route('/custom/times/<int:time_id>', methods=['GET'])
 def get_time(time_id):
@@ -92,4 +106,5 @@ def not_found(error):
     return make_response(jsonify({'error': 'Not found'}), 404)
 
 if __name__ == "__main__": #If this script was run directly from the command line
-   app.run(host='0.0.0.0', port=5000, debug=True)
+   app.run(host=str(ip), port=5000, debug=True)
+

@@ -1,0 +1,31 @@
+Team 11:
+
+Andrew Beckwith, bandrew1@vt.edu
+Was responsible for the LED, main server, mongodb and authentication. 
+
+Tanner Williams, tanner12@vt.edu
+Responsible for writing the custom api, as well as the example.py and 
+everything along with that
+
+Carter Heron, heronc95@vt.edu 
+Responsible for the canvas interface with upload and download.
+
+Unusual Configurations:
+
+
+The custom api is all about timezones, so we used a python library to get
+those, which needs to be installed
+For the custom.py you need to install pytz
+Need to do pip3 install pytz 
+
+The led and custom advertise themselves over zeroconf by opening a port to
+8.8.8.8 to get the outbound IP address to connect to. This is so that the 
+server pi can find the address to get to it. 
+
+The example python file also is invoked by
+
+
+Server listens on 5000
+python3 example.py -a <ipaddressofserver> -p <portit is listeningon>
+
+
